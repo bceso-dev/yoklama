@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Akıllı Yoklama Sistemi</title>
+    <style>
+        body { font-family: Arial, sans-serif; background: #f4f7f6; margin: 0; padding: 20px; display: flex; justify-content: center; align-items: center; min-height: 100vh; box-sizing: border-box; }
+        .card { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        .card.wide { max-width: 760px; }
+        h2 { text-align: center; color: #2c3e50; margin-top: 0; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: bold; color: #555; }
+        input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 16px; }
+        button { width: 100%; background: #27ae60; color: white; border: none; padding: 12px; border-radius: 6px; font-size: 16px; cursor: pointer; font-weight: bold; }
+        button:hover { background: #219653; }
+        button:disabled { background: #95a5a6; cursor: not-allowed; }
+        #durum { margin-top: 15px; text-align: center; font-weight: bold; min-height: 1.4em; }
+        .teacher-view { text-align: center; }
+        .teacher-row { display: flex; gap: 30px; align-items: center; justify-content: center; flex-wrap: wrap; }
+        .pin-display { background: #e8f4fd; border: 2px dashed #3498db; padding: 20px 30px; font-size: 96px; font-weight: bold; color: #2980b9; border-radius: 8px; margin: 10px 0; letter-spacing: 12px; font-variant-numeric: tabular-nums; }
+        .pin-bar { height: 8px; background: #dfe6e9; border-radius: 4px; overflow: hidden; margin: 0 0 15px; }
+        .pin-bar > div { height: 100%; background: #3498db; transition: width 1s linear; }
+        #qr { display: inline-block; padding: 10px; background: white; border: 1px solid #ddd; border-radius: 8px; }
+        code { font-size: 14px; background: #eee; padding: 5px 8px; display: inline-block; margin-bottom: 10px; border-radius: 4px; word-break: break-all; }
+        .uyari { color: #c0392b; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div class="card" id="app"></div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        // --- YAPILANDIRMA ---
+        const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzXQp2e0wD89kdaR5Yj1cRUX1hmbMo2G8MsGaIMiHsi44CYfmAxhz3O49eIDaXefNF-9A/exec";
+        const SINIF_LAT = 38.419200;   // Sınıfınızın enlemi
+        const SINIF_LNG = 27.128700;   // Sınıfınızın boylamı
+        const MAX_MESAFE_METRE = 45;   // İzin verilen maksimum uzaklık (metre)
+
+        const urlParams = new URLSearchParams(window.location.search);
+        const isTeacher = urlParams.get('teacher') === 'true';
+        const appDiv = document.getElementById("app");
+        const ogrenciAdresi = window.location.origin + window.location.pathname;
+
+        if (GOOGLE_SCRIPT_URL.startsWith("BURAYA")) {
+            appDiv.innerHTML = '<p class="uyari">Kurulum tamamlanmadı: index.html içindeki GOOGLE_SCRIPT_URL değerini girin (bkz. KURULUM.md).</p>';
+        } else if (isTeacher) {
+            ogretmenEkrani();
+        } else {
+            ogrenciEkrani();
+        }
+
+        // ---------------- ÖĞRETMEN / PROJEKSİYON ----------------
+        function pinUret(saniye) {
+            return String(Math.floor(saniye / 30) % 9000 + 1000);
+        }
+
+        function ogretmenEkrani() {
+            appDiv.classList.add("wide");
+            appDiv.innerHTML = `
+                <div class="teacher-view">
+                    <h2>Ders Yoklama Paneli</h2>
+                    <div class="teacher-row">
+                        <div>
+                            <p>Telefonunuzla okutun:</p>
+                            <div id="qr"></div>
+                            <br><code>${ogrenciAdresi}</code>
+                        </div>
+                        <div>
+                            <p style="font-weight:bold;">Canlı PIN (30 sn'de bir değişir)</p>
+                            <div class="pin-display" id="canliPin">----</div>
+                            <div class="pin-bar"><div id="pinBar" style="width:100%"></div></div>
+                        </div>
+                    </div>
+                    <p style="color: #7f8c8d; font-size: 13px;" id="senkron">Sunucu saati ile senkronize ediliyor...</p>
+                </div>
+            `;
+
+            new QRCode(document.getElementById("qr"), { text: ogrenciAdresi, width: 220, height: 220 });
+
+            let saatFarki = 0; // sunucu - istemci (saniye)
+            fetch(GOOGLE_SCRIPT_URL)
+                .then(r => r.json())
+                .then(d => {
+                    saatFarki = d.sunucuSaati - Math.floor(Date.now() / 1000);
+                    document.getElementById("senkron").innerText =
+                        "Sunucu saati ile senkronize edildi. Kod WhatsApp'tan dışarı iletilse bile süresi yetişmez!";
+                })
+                .catch(() => {
+                    document.getElementById("senkron").innerText =
+                        "Uyarı: Sunucu saatine ulaşılamadı, bilgisayar saati kullanılıyor.";
+                });
+
+            function pinGuncelle() {
+                const simdi = Math.floor(Date.now() / 1000) + saatFarki;
+                document.getElementById("canliPin").innerText = pinUret(simdi);
+                const kalan = 30 - (simdi % 30);
+                document.getElementById("pinBar").style.width = (kalan / 30 * 100) + "%";
+            }
+            setInterval(pinGuncelle, 1000);
+            pinGuncelle();
+        }
+
+        // ---------------- ÖĞRENCİ ----------------
+        function ogrenciEkrani() {
+            appDiv.innerHTML = `
+                <h2>Yoklama Girişi</h2>
+                <div class="form-group">
+                    <label>Öğrenci Numarası:</label>
+                    <input type="text" id="ogrenci_no" inputmode="numeric" placeholder="Örn: 202312345" required>
+                </div>
+                <div class="form-group">
+                    <label>Ad Soyad:</label>
+                    <input type="text" id="ad_soyad" placeholder="Adınız Soyadınız" required>
+                </div>
+                <div class="form-group">
+                    <label>Tahtadaki 4 Haneli PIN:</label>
+                    <input type="text" id="pin" inputmode="numeric" maxlength="4" placeholder="****" required style="letter-spacing: 3px; font-size: 20px; text-align: center;">
+                </div>
+                <button id="gonderBtn" onclick="yoklamaGonder()">Yoklamaya Katıl</button>
+                <p id="durum"></p>
+            `;
+            // Numara ve adı bir sonraki derste yeniden yazmasın
+            try {
+                document.getElementById("ogrenci_no").value = localStorage.getItem("ogrenci_no") || "";
+                document.getElementById("ad_soyad").value = localStorage.getItem("ad_soyad") || "";
+            } catch (e) {}
+        }
+
+        function yoklamaGonder() {
+            const ogrenci_no = document.getElementById("ogrenci_no").value.trim();
+            const ad_soyad = document.getElementById("ad_soyad").value.trim();
+            const pin = document.getElementById("pin").value.trim();
+            const durum = document.getElementById("durum");
+            const btn = document.getElementById("gonderBtn");
+
+            if (!ogrenci_no || !ad_soyad || !pin) {
+                durum.style.color = "red";
+                durum.innerText = "Lütfen tüm alanları doldurun!";
+                return;
+            }
+            if (!navigator.geolocation) {
+                durum.style.color = "red";
+                durum.innerText = "Tarayıcınız konum özelliğini desteklemiyor!";
+                return;
+            }
+
+            btn.disabled = true;
+            durum.style.color = "#3498db";
+            durum.innerText = "Konumunuz doğrulanıyor, lütfen bekleyin...";
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const mesafe = mesafeHesapla(SINIF_LAT, SINIF_LNG, lat, lng);
+
+                    if (mesafe > MAX_MESAFE_METRE) {
+                        durum.style.color = "red";
+                        durum.innerText = `Hata: Sınıf sınırları dışındasınız! (Uzaklık: ${Math.round(mesafe)} m)`;
+                        btn.disabled = false;
+                        return;
+                    }
+
+                    durum.innerText = "Sunucuya gönderiliyor...";
+
+                    fetch(GOOGLE_SCRIPT_URL, {
+                        method: "POST",
+                        body: JSON.stringify({ ogrenci_no, ad_soyad, pin, lat, lng })
+                    })
+                    .then(res => res.json())
+                    .then(data => {
+                        if (data.basarili) {
+                            durum.style.color = "green";
+                            durum.innerText = data.mesaj;
+                            try {
+                                localStorage.setItem("ogrenci_no", ogrenci_no);
+                                localStorage.setItem("ad_soyad", ad_soyad);
+                            } catch (e) {}
+                        } else {
+                            durum.style.color = "red";
+                            durum.innerText = data.mesaj;
+                            btn.disabled = false;
+                        }
+                    })
+                    .catch(() => {
+                        durum.style.color = "red";
+                        durum.innerText = "Bağlantı hatası oluştu. Tekrar deneyin.";
+                        btn.disabled = false;
+                    });
+                },
+                () => {
+                    durum.style.color = "red";
+                    durum.innerText = "Konum izni reddedildi veya GPS alınamadı! Konum izinlerini açın.";
+                    btn.disabled = false;
+                },
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+            );
+        }
+
+        function mesafeHesapla(lat1, lon1, lat2, lon2) {
+            const R = 6371e3;
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+                      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+                      Math.sin(dLon/2) * Math.sin(dLon/2);
+            return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+        }
+    </script>
+</body>
+</html>
