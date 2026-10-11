@@ -37,9 +37,11 @@
         const SINIF_LAT = 38.385607;   // Sınıfınızın enlemi
         const SINIF_LNG = 27.163278;   // Sınıfınızın boylamı
         const MAX_MESAFE_METRE = 100;   // İzin verilen maksimum uzaklık (metre)
+        const KONUM_KONTROLU = false;   // true: öğrenciden konum istenir, false: istenmez (Code.gs ile aynı olmalı)
 
         const urlParams = new URLSearchParams(window.location.search);
-        const isTeacher = urlParams.get('teacher') === 'true';
+        const ogretmenAnahtari = urlParams.get('teacher') || '';
+        const isTeacher = ogretmenAnahtari !== '';
         const appDiv = document.getElementById("app");
         const ogrenciAdresi = window.location.origin + window.location.pathname;
 
@@ -52,10 +54,6 @@
         }
 
         // ---------------- ÖĞRETMEN / PROJEKSİYON ----------------
-        function pinUret(saniye) {
-            return String(Math.floor(saniye / 30) % 9000 + 1000);
-        }
-
         function ogretmenEkrani() {
             appDiv.classList.add("wide");
             appDiv.innerHTML = `
@@ -65,41 +63,50 @@
                         <div>
                             <p>Telefonunuzla okutun:</p>
                             <div id="qr"></div>
-                            <br><code>${ogrenciAdresi}</code>
                         </div>
                         <div>
-                            <p style="font-weight:bold;">Canlı PIN (30 sn'de bir değişir)</p>
+                            <p style="font-weight:bold;">Canlı PIN (<span id="pinSure">--</span> sn'de bir değişir)</p>
                             <div class="pin-display" id="canliPin">----</div>
                             <div class="pin-bar"><div id="pinBar" style="width:100%"></div></div>
                         </div>
                     </div>
-                    <p style="color: #7f8c8d; font-size: 13px;" id="senkron">Sunucu saati ile senkronize ediliyor...</p>
+                    <p style="color: #7f8c8d; font-size: 13px;" id="senkron">Sunucuya bağlanılıyor...</p>
                 </div>
             `;
 
             new QRCode(document.getElementById("qr"), { text: ogrenciAdresi, width: 220, height: 220 });
 
-            let saatFarki = 0; // sunucu - istemci (saniye)
-            fetch(GOOGLE_SCRIPT_URL)
-                .then(r => r.json())
-                .then(d => {
-                    saatFarki = d.sunucuSaati - Math.floor(Date.now() / 1000);
-                    document.getElementById("senkron").innerText =
-                        "Sunucu saati ile senkronize edildi. Kod WhatsApp'tan dışarı iletilse bile süresi yetişmez!";
-                })
-                .catch(() => {
-                    document.getElementById("senkron").innerText =
-                        "Uyarı: Sunucu saatine ulaşılamadı, bilgisayar saati kullanılıyor.";
-                });
+            // PIN sunucuda gizli tohumla üretilir; bu sayfa onu sadece öğretmen anahtarıyla çeker.
+            let kalan = 0, sure = 20;
+            const senkron = document.getElementById("senkron");
 
-            function pinGuncelle() {
-                const simdi = Math.floor(Date.now() / 1000) + saatFarki;
-                document.getElementById("canliPin").innerText = pinUret(simdi);
-                const kalan = 30 - (simdi % 30);
-                document.getElementById("pinBar").style.width = (kalan / 30 * 100) + "%";
+            async function pinCek() {
+                try {
+                    const r = await fetch(GOOGLE_SCRIPT_URL + "?key=" + encodeURIComponent(ogretmenAnahtari) + "&t=" + Date.now());
+                    const d = await r.json();
+                    if (!d.pin) {
+                        document.getElementById("canliPin").innerText = "----";
+                        senkron.innerText = "Yetkisiz: adresteki öğretmen anahtarı hatalı.";
+                        senkron.className = "uyari";
+                        return;
+                    }
+                    document.getElementById("canliPin").innerText = d.pin;
+                    document.getElementById("pinSure").innerText = d.sure;
+                    kalan = d.kalan; sure = d.sure;
+                    senkron.innerText = "Sunucuya bağlı. Kod WhatsApp'tan dışarı iletilse bile süresi yetişmez!";
+                    senkron.className = "";
+                    setTimeout(pinCek, kalan * 1000 + 400);
+                } catch (e) {
+                    senkron.innerText = "Sunucuya ulaşılamadı, yeniden deneniyor...";
+                    setTimeout(pinCek, 3000);
+                }
             }
-            setInterval(pinGuncelle, 1000);
-            pinGuncelle();
+
+            setInterval(() => {
+                if (kalan > 0) kalan -= 1;
+                document.getElementById("pinBar").style.width = (kalan / sure * 100) + "%";
+            }, 1000);
+            pinCek();
         }
 
         // ---------------- ÖĞRENCİ ----------------
@@ -140,14 +147,21 @@
                 durum.innerText = "Lütfen tüm alanları doldurun!";
                 return;
             }
-            if (!navigator.geolocation) {
-                durum.style.color = "red";
-                durum.innerText = "Tarayıcınız konum özelliğini desteklemiyor!";
+            btn.disabled = true;
+            durum.style.color = "#3498db";
+
+            if (!KONUM_KONTROLU) {
+                sunucuyaGonder({ ogrenci_no, ad_soyad, pin });
                 return;
             }
 
-            btn.disabled = true;
-            durum.style.color = "#3498db";
+            if (!navigator.geolocation) {
+                durum.style.color = "red";
+                durum.innerText = "Tarayıcınız konum özelliğini desteklemiyor!";
+                btn.disabled = false;
+                return;
+            }
+
             durum.innerText = "Konumunuz doğrulanıyor, lütfen bekleyin...";
 
             navigator.geolocation.getCurrentPosition(
@@ -162,33 +176,7 @@
                         btn.disabled = false;
                         return;
                     }
-
-                    durum.innerText = "Sunucuya gönderiliyor...";
-
-                    fetch(GOOGLE_SCRIPT_URL, {
-                        method: "POST",
-                        body: JSON.stringify({ ogrenci_no, ad_soyad, pin, lat, lng })
-                    })
-                    .then(res => res.json())
-                    .then(data => {
-                        if (data.basarili) {
-                            durum.style.color = "green";
-                            durum.innerText = data.mesaj;
-                            try {
-                                localStorage.setItem("ogrenci_no", ogrenci_no);
-                                localStorage.setItem("ad_soyad", ad_soyad);
-                            } catch (e) {}
-                        } else {
-                            durum.style.color = "red";
-                            durum.innerText = data.mesaj;
-                            btn.disabled = false;
-                        }
-                    })
-                    .catch(() => {
-                        durum.style.color = "red";
-                        durum.innerText = "Bağlantı hatası oluştu. Tekrar deneyin.";
-                        btn.disabled = false;
-                    });
+                    sunucuyaGonder({ ogrenci_no, ad_soyad, pin, lat, lng });
                 },
                 () => {
                     durum.style.color = "red";
@@ -197,6 +185,38 @@
                 },
                 { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
             );
+        }
+
+        function sunucuyaGonder(veri) {
+            const durum = document.getElementById("durum");
+            const btn = document.getElementById("gonderBtn");
+            durum.style.color = "#3498db";
+            durum.innerText = "Sunucuya gönderiliyor...";
+
+            fetch(GOOGLE_SCRIPT_URL, {
+                method: "POST",
+                body: JSON.stringify(veri)
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.basarili) {
+                    durum.style.color = "green";
+                    durum.innerText = data.mesaj;
+                    try {
+                        localStorage.setItem("ogrenci_no", veri.ogrenci_no);
+                        localStorage.setItem("ad_soyad", veri.ad_soyad);
+                    } catch (e) {}
+                } else {
+                    durum.style.color = "red";
+                    durum.innerText = data.mesaj;
+                    btn.disabled = false;
+                }
+            })
+            .catch(() => {
+                durum.style.color = "red";
+                durum.innerText = "Bağlantı hatası oluştu. Tekrar deneyin.";
+                btn.disabled = false;
+            });
         }
 
         function mesafeHesapla(lat1, lon1, lat2, lon2) {
