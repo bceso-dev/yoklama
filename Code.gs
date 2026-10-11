@@ -6,7 +6,7 @@
 // --- YAPILANDIRMA (index.html ile aynı değerleri girin) ---
 var SINIF_LAT = 38.419200;      // Sınıfın enlemi
 var SINIF_LNG = 27.128700;      // Sınıfın boylamı
-var MAX_MESAFE_METRE = 45;      // İzin verilen maksimum uzaklık (metre)
+var MAX_MESAFE_METRE = 100;      // İzin verilen maksimum uzaklık (metre)
 var SAYFA_ADI = "Yoklama";      // Kayıtların yazılacağı sayfa
 
 function jsonCevap(obj) {

@@ -75,3 +75,17 @@ cd ~/Yoklama && python3 -m http.server 8000
 - Bina içinde GPS hassasiyeti 20-50 m sapabilir. `MAX_MESAFE_METRE` değerini ilk derste deneyerek ayarlayın (gerekirse 60-80 m yapın).
 - PIN sunucu saatine göre üretilir; öğretmen ekranı açılışta sunucudan saati alıp kendini senkronize eder.
 - Orijinal öneriden farklar: mükerrer kontrolü artık **aynı gün** içindir (dönem boyu değil), GPS kontrolü sunucuda da yapılır, tabloya başlık satırı ve uzaklık sütunu eklenir, projeksiyon ekranında QR kod otomatik üretilir.
+
+---
+
+## Kurulu sistemin adresleri (11 Ekim 2026)
+
+| Ne | Adres |
+|---|---|
+| Öğrenci formu (QR bu adrese) | https://bceso-dev.github.io/yoklama/ |
+| Öğretmen / projeksiyon ekranı | https://bceso-dev.github.io/yoklama/?teacher=true |
+| Google E-Tablo (kayıtlar) | https://docs.google.com/spreadsheets/d/1Ukm4_q_3VpNcb8QPyDSQ7gB21kvAuqcy-ILhKPEJXTw/edit |
+| Apps Script projesi | https://script.google.com/u/0/home/projects/1yDhAgVzVR2ZacjSg4CyCCq5ar3veP8WXQRfu7EFC-xou-Lf8iWCiAifX/edit |
+| GitHub deposu | https://github.com/bceso-dev/yoklama |
+
+Sınıf koordinatları hâlâ örnek değerlerde (38.4192, 27.1287). Gerçek koordinatları hem `Code.gs` (Apps Script'te yeni sürüm dağıtın) hem `index.html` (GitHub'a yükleyin) içinde güncelleyin.
