@@ -70,7 +70,7 @@
                             <div class="pin-bar"><div id="pinBar" style="width:100%"></div></div>
                         </div>
                     </div>
-                    <p style="color: #7f8c8d; font-size: 13px;" id="senkron">Sunucuya bağlanılıyor...</p>
+                    <p style="color: #7f8c8d; font-size: 13px;" id="senkron"></p>
                 </div>
             `;
 
@@ -93,7 +93,7 @@
                     document.getElementById("canliPin").innerText = d.pin;
                     document.getElementById("pinSure").innerText = d.sure;
                     kalan = d.kalan; sure = d.sure;
-                    senkron.innerText = "Sunucuya bağlı. Kod WhatsApp'tan dışarı iletilse bile süresi yetişmez!";
+                    senkron.innerText = "";
                     senkron.className = "";
                     setTimeout(pinCek, kalan * 1000 + 400);
                 } catch (e) {
